@@ -11,7 +11,6 @@ if (typeof phantom !== "undefined") {
         }
     };
     Error.prototype = OriginalErrorPrototype;
-    
 }
 
 // Capture console
@@ -48,9 +47,21 @@ if (typeof phantom !== "undefined") {
     };
 })();
 
+// Catch any unhandled errors
+(function(){
+    window.onerror = function(e) {
+        console.error(e);
+        var id = window.frameElement.id;
+        id = id.slice(0,-6); // remove '-frame' from id
+        parent.postMessage({id:id,end:performance.now()},"*");
+        return true;
+    };
+})();
+
 // Load the test file
 (function(){
     var id = window.frameElement.id;
     id = id.slice(0,-6); // remove '-frame' from id
+    parent.postMessage({id:id,start:performance.now()},"*");
     document.write('<script src="' + id + '.js"></script>');
 })();

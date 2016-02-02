@@ -1,3 +1,4 @@
+"use strict";
 // Fix Error prototype for PhantomJS
 if (typeof phantom !== "undefined") {
     // Fix Error prototype
@@ -11,72 +12,81 @@ if (typeof phantom !== "undefined") {
         }
     };
     Error.prototype = OriginalErrorPrototype;
-    
 }
-/*
-// Capture console
-(function(){
-    var OldConsole = console;
-    var divlog = function(m) {
-        div = document.getElementById('console');
-        if ( typeof(div) !== 'undefined' ) {
-            div.innerHTML = div.innerHTML + m + "\n";
-        }
-    };
-    console = {
-        assert: function(c,m) {
-            if ( c ) {
-                divlog(m);
-                OldConsole.log(m);
-            }
-        },
-        log: function(m) {
-            divlog(m);
-            OldConsole.log(m);
-        },
-        error: function(m) {
-            divlog('<span style="color:red">' + m + '</span>');
-            OldConsole.error(m);
-        },
-        clear: function(m) {
-            div = document.GetElementById('console');
-            if ( typeof(div) !== 'undefined' ) {
-                div.innerHTML = '';
-            }
-            OldConsole.clear();
-        }
-    };
-})();*/
 
 function iframeDoc( id ) {
-    frameRef = document.getElementById(id);
+    var frameRef = document.getElementById(id);
     if(!frameRef) return;
     return frameRef.contentWindow
         ? frameRef.contentWindow.document
         : frameRef.contentDocument
 }
+
 var tests = [
-'archive_tar','crypto_des','database_sql_driver','encoding_hex','go_format','image_jpeg','net_http_fcgi','sync_atomic','archive_zip','crypto_dsa','database_sql','encodingon','go_parser','image','net_mail','sync','bufio','crypto_ecdsa','debug_dwarf','encoding_pem','go_printer','image_png','net_rpconrpc','testing_quick','bytes','crypto_elliptic','debug_elf','encoding_xml','go_scanner','index_suffixarray','net_textproto','compress_bzip2','crypto_hmac','debug_gosym','errors','go_token','io_ioutil','net_url','text_scanner','compress_flate','crypto_md5','debug_macho','expvar','hash_adler32','io','path_filepath','text_tabwriter','compress_gzip','crypto_rand','debug_pe','flag','hash_crc32','math_big','path','text_template','compress_lzw','crypto_rc4','encoding_ascii85','fmt','hash_crc64','math_cmplx','text_template_parse','compress_zlib','crypto_rsa','encoding_asn1','github.com_gophe_gophe','hash_fnv','math','reflect','time','container_heap','crypto_sha1','encoding_base32','github.com_gophe_gophe_tests','html','math_rand','regexp','unicode','container_list','crypto_sha256','encoding_base64','github.com_gophe_gophe_tests_main','html_template','mime','regexp_syntax','unicode_utf16','container_ring','crypto_sha512','encoding_binary','go_ast','image_color','mime_multipart','sort','unicode_utf8','crypto_aes','crypto_subtle','encoding_csv','go_constant','image_draw','mime_quotedprintable','strconv','crypto_cipher','crypto_x509','encoding_gob','go_doc','image_gif','net_http_cookiejar','strings'
-]
-setInterval(function() {
-    console.log('tick');
-    var activeTests = document.getElementsByClassName('test');
-    for (var i = 0; i < activeTests.length; i++) {
-        var id = activeTests[i].id;
-        iframe = iframeDoc( id );
-        if (iframe !== 'undefined') {
-            iframeDiv = iframe.getElementById('console');
-            if ( iframeDiv ) {
-                targetId = id.slice(0,-6); // remove '-frame' from id
-                document.getElementById(targetId).innerHTML = iframeDiv.innerHTML;
-            }
+// Breaks in browsers:
+// 'database_sql',
+'archive_tar','archive_zip','bufio','bytes','compress_bzip2','compress_flate','compress_gzip','compress_lzw','compress_zlib','container_heap','container_list','container_ring','crypto_aes','crypto_cipher','crypto_des','crypto_dsa','crypto_ecdsa','crypto_elliptic','crypto_hmac','crypto_md5','crypto_rand','crypto_rc4','crypto_rsa','crypto_sha1','crypto_sha256','crypto_sha512','crypto_subtle','crypto_x509','database_sql_driver','debug_dwarf','debug_elf','debug_gosym','debug_macho','debug_pe','encoding_ascii85','encoding_asn1','encoding_base32','encoding_base64','encoding_binary','encoding_csv','encoding_gob','encoding_hex','encoding_json','encoding_pem','encoding_xml','errors','expvar','flag','fmt','github.com_gopherjs_gopherjs_js','github.com_gopherjs_gopherjs_tests','github.com_gopherjs_gopherjs_tests_main','go_ast','go_constant','go_doc','go_format','go_parser','go_printer','go_scanner','go_token','hash_adler32','hash_crc32','hash_crc64','hash_fnv','html','html_template','image_color','image_draw','image_gif','image_jpeg','image','image_png','index_suffixarray','io_ioutil','io','math_big','math_cmplx','math','math_rand','mime','mime_multipart','mime_quotedprintable','net_http_cookiejar','net_http_fcgi','net_mail','net_rpc_jsonrpc','net_textproto','net_url','path_filepath','path','reflect','regexp','regexp_syntax','sort','strconv','strings','sync_atomic','sync','testing_quick','text_scanner','text_tabwriter','text_template','text_template_parse','time','unicode','unicode_utf16','unicode_utf8'
+];
+
+var active = [];
+var startTimes = {};
+var maxActive = 1; // Run at most this many concurrent tests
+
+function updateConsole() {
+    for (var i=0; i < active.length; i++) {
+        updateConsoleFor( active[i] );
+    }
+};
+
+function updateConsoleFor(id) {
+    var iframe = iframeDoc( id + '-frame');
+    var iframeDiv = iframe.getElementById('console');
+    if ( iframeDiv ) {
+        var html = iframeDiv.innerHTML;
+        if ( html.length > 0 ) {
+            document.getElementById( id ).innerHTML = html;
         }
     }
-},250);
+}
 
-function start_tests(tests) {
-    newId = tests.shift();
-console.log('newId = ' + newId);
+var updateInterval = setInterval(updateConsole,250);
+
+window.addEventListener("message", function(event) {
+    var id = event.data.id.replace(/-frame/,'');
+console.log('id = '+ id);
+    var start = event.data.start;
+    var end = event.data.end;
+    if (start !== undefined ) {
+        startTimes[ id ] = start;
+        return;
+    }
+        
+    // Remove id from list of active tests
+    var i = active.indexOf( id );
+    if ( i != -1 ) {
+        active.splice(i,1);
+    }
+    if ( tests.length == 0 && active.length == 0 ) {
+        clearInterval(updateInterval);
+    }
+    var elapsed = Math.round(end - startTimes[id])/1000;
+    console.log("Elapsed: " + elapsed);
+    document.getElementById(id + '-h2').innerHTML = elapsed + ' seconds';
+    // Introduce a small delay, to ensure the iframe's DOM has a chance to be updated
+    setTimeout(function() {
+        updateConsoleFor( id );
+    }, 100);
+    setTimeout(start_tests,0);
+});
+
+function start_tests() {
+    while( active.length < maxActive ) {
+        start_test( tests.shift() );
+    }
+}
+
+function start_test(newId) {
+    active.push(newId);
     if(typeof(newId) === 'undefined') {
         console.log("No more tests");
         return;
@@ -84,22 +94,19 @@ console.log('newId = ' + newId);
     console.log("Creating frame id '%s'", newId+'-frame');
     var h1 = document.createElement('h1');
     h1.innerHTML = newId;
+    var h2 = document.createElement('h2');
+    h2.id = newId + '-h2';
     var div = document.createElement('div');
     div.id = newId;
+    div.innerHTML = '<i>Waiting for test...</i>';
     var iframe = document.createElement('iframe');
     iframe.id = newId + '-frame';
     iframe.src = 'container.html';
     iframe.setAttribute('class','test');
-    iframe.addEventListener("mainFinished", function(e) {
-        console.log(newId + ' finished');
-    });
-    window.addEventListener("message", function(e) {
-        console.log("got message from child iframe: " + event.data);
-        start_tests(tests);
-    });
+console.log('start ' + performance.now());
     document.body.appendChild(h1);
+    document.body.appendChild(h2);
     document.body.appendChild(div);
     document.body.appendChild(iframe);
 };
-var todo = tests.slice(0);
-start_tests(todo);
+start_tests();
