@@ -1,1 +1,4 @@
-for x in original/*.js; do cat $x | sed -e '/$flushConsole();/a parent.postMessage($global.frameElement.id,"*");' | sed -e '/"use strict";/ r preamble.js' > `basename $x`; done
+#!/bin/bash
+for x in original/*.js; do
+    cat $x | perl -p0e 's/(};\s*?var \$schedule\s?=\s?function)/if(\$scheduled.length==0){parent.postMessage({id:frameElement.id,end:performance.now()},"*");}$1/s' > `basename $x`;
+done
